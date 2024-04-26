@@ -56,7 +56,7 @@ generate_kwargs = {
     "length_penalty": 1.5,
     "num_return_sequences": 2
 }
-items = "potato, cheese"
+# items = "potato, cheese"
 # generator = pipeline("text2text-generation", model=model, tokenizer=tokenizer)
 # generated = generator(items, return_tensors=True, return_text=False, **generate_kwargs)
 # outputs = post_generator(generated, tokenizer)

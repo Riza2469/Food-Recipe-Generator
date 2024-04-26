@@ -99,24 +99,6 @@ def get_recipe_id_by_name():
     except Exception as e:
         return jsonify({'error': 'Failed to fetch recipe ID'}), 500
 
-# @app.route('/get_recipes_by_name', methods=['GET'])
-# def get_recipes_by_name():
-#     try:
-#         recipe_name = request.args.get('recipe_name')
-#         if not recipe_name:
-#             return jsonify({'error': 'Recipe name is required as a query parameter.'}), 400
-
-#         # Perform a case-insensitive search for recipes with names similar to the input
-#         recipes_cursor = recipes_collection.find({"recipe_title": {"$regex": f".*{recipe_name}.*", "$options": "i"}}).limit(10)
-#         recipes_list = list(recipes_cursor)
-
-#         # Convert ObjectId to string for JSON compatibility
-#         for recipe in recipes_list:
-#             recipe['_id'] = str(recipe['_id'])
-
-#         return jsonify({'recipes': recipes_list}), 200
-#     except Exception as e:
-#         return jsonify({'error': f'Failed to fetch recipes: {str(e)}'}), 500
 @app.route('/get_recipes_by_name', methods=['GET'])
 def get_recipes_by_name():
     try:
