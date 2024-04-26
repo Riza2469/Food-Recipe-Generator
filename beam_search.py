@@ -1,7 +1,7 @@
-import torch
-from transformers import AutoModelForSeq2SeqLM
-from transformers import AutoTokenizer
-from transformers import pipeline
+# import torch
+# from transformers import AutoModelForSeq2SeqLM
+# from transformers import AutoTokenizer
+# from transformers import pipeline
 
 from pprint import pprint
 import re
