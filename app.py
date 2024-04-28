@@ -1,3 +1,4 @@
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 from urllib.parse import quote_plus
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -11,6 +12,10 @@ from bson import json_util
 from flask import Response
 import json
 import requests
+from itertools import permutations
+import requests
+from bs4 import BeautifulSoup
+
 
 app = Flask(__name__)
 CORS(app)
@@ -27,29 +32,143 @@ user_recipes_collection = mongo_db['user_recipes']
 user_favorites_collection = mongo_db['user_favorites']
 
 
-def fetch_unsplash_image_url(query, fallback_query=None):
-    access_key = os.getenv('UNSPLASH_ACCESS_KEY')
-    if not access_key:
-        raise ValueError("Unsplash Access Key is not set in environment variables")
+def load_model():
+    tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-recipe-generation")
+    model = AutoModelForSeq2SeqLM.from_pretrained("flax-community/t5-recipe-generation")
+    generator = pipeline("text2text-generation", model=model, tokenizer=tokenizer)
+    return generator, tokenizer
 
-    # First, try searching with the primary query
-    url = f'https://api.unsplash.com/search/photos?query={quote_plus(query)}&client_id={access_key}'
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        if data['results']:
-            return data['results'][0]['urls']['regular']
 
-    # If no results, try the fallback query if provided
-    if fallback_query:
-        url = f'https://api.unsplash.com/search/photos?query={quote_plus(fallback_query)}&client_id={access_key}'
-        response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()
-            if data['results']:
-                return data['results'][0]['urls']['regular']
+def generate_recipe(ingredients):
+    # Load the model globally for efficiency (consider caching for larger models)
+    generator, tokenizer = load_model()
+    all_ingredients = ", ".join(ingredients)
+    
+    # Generate recipe using chosen logic
+    if sampling_mode == "Beam Search":
+        generated = generator(all_ingredients, return_tensors=True, return_text=False, **beam_search.generate_kwargs)
+        outputs = beam_search.post_generator(generated, tokenizer)
+    elif sampling_mode == "Top-k Sampling":
+        generated = generator(all_ingredients, return_tensors=True, return_text=False, **top_sampling.generate_kwargs)
+        outputs = top_sampling.post_generator(generated, tokenizer)
+    output = outputs[0]
+    return output
 
-    return None
+@app.route('/generate_recipe', methods=['POST'])
+def generate_recipe_api():
+    data = request.get_json()
+    ingredients = data["ingredients"]
+    recipe = generate_recipe(ingredients)
+    return jsonify(recipe)
+
+# def fetch_unsplash_image_url(query, fallback_queries=None):
+#     access_key = os.getenv('UNSPLASH_ACCESS_KEY')
+#     if not access_key:
+#         raise ValueError("Unsplash Access Key is not set in environment variables")
+
+#     # Modify the query to include generic food-related keywords
+#     query = f"{query} food"  # Add "food" to specify images related to food
+
+#     # Generate permutations of words in the query
+#     words = query.split()
+#     word_permutations = ['+'.join(p) for p in permutations(words)]
+
+#     # Try each permutation as a query
+#     for permuted_query in word_permutations:
+#         url = f'https://api.unsplash.com/search/photos?query={quote_plus(permuted_query)}&client_id={access_key}'
+#         response = requests.get(url)
+#         if response.status_code == 200:
+#             data = response.json()
+#             if data['results']:
+#                 return data['results'][0]['urls']['regular']
+
+#     # If no results, try the fallback queries if provided
+#     if fallback_queries:
+#         for fallback_query in fallback_queries:
+#             url = f'https://api.unsplash.com/search/photos?query={quote_plus(fallback_query)}&client_id={access_key}'
+#             response = requests.get(url)
+#             if response.status_code == 200:
+#                 data = response.json()
+#                 if data['results']:
+#                     return data['results'][0]['urls']['regular']
+
+#     return None
+
+# def fetch_google_image_urls(query, num_images=5):
+#     # Construct the Google search URL for images
+#     google_url = f"https://www.google.com/search?tbm=isch&q={quote_plus(query)}"
+
+#     # Set headers to mimic a real browser request
+#     headers = {
+#         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+#     }
+
+#     # Send a GET request to Google
+#     response = requests.get(google_url, headers=headers)
+
+#     # Parse the HTML content of the response
+#     soup = BeautifulSoup(response.text, "html.parser")
+
+#     # Find all image elements in the parsed HTML
+#     image_elements = soup.find_all("img")
+
+#     # Extract the source URLs of the images
+#     image_urls = []
+#     for img in image_elements[:num_images]:
+#         src = img.get("src")
+#         if src:
+#             image_urls.append(src)
+
+#     return image_urls
+
+# def fetch_recipe_image(recipe_title, num_images=5):
+#     # Add "recipe" keyword to the query to improve relevance
+#     query = f"{recipe_title} recipe"
+
+#     # Fetch image URLs from Google
+#     image_urls = fetch_google_image_urls(query, num_images=num_images)
+
+#     return image_urls
+
+def fetch_google_image_urls(query, num_images=5):
+    # Construct the Google search URL for images
+    google_url = f"https://www.google.com/search?tbm=isch&q={quote_plus(query)}"
+
+    # Set headers to mimic a real browser request
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+    }
+
+    # Send a GET request to Google
+    response = requests.get(google_url, headers=headers)
+
+    # Parse the HTML content of the response
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    # Find all image elements in the parsed HTML
+    image_elements = soup.find_all("img")
+
+    # Extract the source URLs of the images
+    image_urls = []
+    for img in image_elements[:num_images]:
+        src = img.get("src")
+        if src:
+            image_urls.append(src)
+
+    # Return the last URL in the list
+    if image_urls:
+        return image_urls[-1]
+    else:
+        return None
+
+def fetch_recipe_image(recipe_title, num_images=5):
+    # Add "recipe" keyword to the query to improve relevance
+    query = f"{recipe_title} recipe"
+
+    # Fetch image URL from Google
+    image_url = fetch_google_image_urls(query, num_images=num_images)
+
+    return image_url
 
 @app.route('/get_recipe_id', methods=['GET'])
 def get_recipe_id_by_name():
@@ -65,6 +184,35 @@ def get_recipe_id_by_name():
             return jsonify({'message': 'Recipe not found'}), 404
     except Exception as e:
         return jsonify({'error': 'Failed to fetch recipe ID'}), 500
+
+# @app.route('/get_recipes_by_name', methods=['GET'])
+# def get_recipes_by_name():
+#     try:
+#         recipe_name = request.args.get('recipe_name')
+#         if not recipe_name:
+#             return jsonify({'error': 'Recipe name is required as a query parameter.'}), 400
+
+#         # Perform a case-insensitive search for recipes with names similar to the input
+#         recipes_cursor = recipes_collection.find({"recipe_title": {"$regex": f".*{recipe_name}.*", "$options": "i"}}).limit(10)
+#         recipes_list = list(recipes_cursor)
+
+#         # Convert ObjectId to string for JSON compatibility
+#         for recipe in recipes_list:
+#             recipe['_id'] = str(recipe['_id'])
+
+#         # If less than 10 recipes are found, fetch more
+#         if len(recipes_list) < 10:
+#             additional_recipes_cursor = recipes_collection.find({
+#                 "recipe_title": {"$regex": f".*{recipe_name}.*", "$options": "i"},
+#                 "_id": {"$nin": [recipe['_id'] for recipe in recipes_list]}}).limit(10 - len(recipes_list))
+#             additional_recipes_list = list(additional_recipes_cursor)
+#             for recipe in additional_recipes_list:
+#                 recipe['_id'] = str(recipe['_id'])
+#             recipes_list.extend(additional_recipes_list)
+
+#         return jsonify({'recipes': recipes_list}), 200
+#     except Exception as e:
+#         return jsonify({'error': f'Failed to fetch recipes: {str(e)}'}), 500
 
 @app.route('/get_recipes_by_name', methods=['GET'])
 def get_recipes_by_name():
@@ -91,12 +239,16 @@ def get_recipes_by_name():
                 recipe['_id'] = str(recipe['_id'])
             recipes_list.extend(additional_recipes_list)
 
+        # Fetch images from Unsplash based on recipe titles
+        for recipe in recipes_list:
+            recipe_title = recipe['recipe_title']
+            image_url = fetch_recipe_image(recipe_title)
+            if image_url:
+                recipe['image_url'] = image_url
+
         return jsonify({'recipes': recipes_list}), 200
     except Exception as e:
         return jsonify({'error': f'Failed to fetch recipes: {str(e)}'}), 500
-
-
-
 
 
 def load_data_from_mongodb():
@@ -158,7 +310,7 @@ def recommend_recipes():
 
     recommendations_list = []
     for _, row in recommendations.iterrows():
-        image_url = fetch_unsplash_image_url(row['recipe_title'])
+        image_url = fetch_recipe_image(row['recipe_title'])
         if not image_url:
             # Fallback to a default image or another source if Spoonacular doesn't return an image
             image_url = "https://example.com/default_image.jpg"
@@ -215,7 +367,7 @@ def get_recipe():
 
         # Convert ObjectId to string for JSON serialization
         recipe['_id'] = str(recipe['_id'])
-        image_url = fetch_unsplash_image_url(recipe['recipe_title'])
+        image_url = fetch_recipe_image(recipe['recipe_title'])
         recipe['image_url'] = image_url
 
         # Return the found recipe
@@ -380,7 +532,7 @@ def get_trending_recipes():
         # Convert MongoDB BSON to JSON
         for recipe in trending_recipes:
             recipe['_id'] = str(recipe['_id'])  # Convert ObjectId to string for JSON compatibility
-            image_url = fetch_unsplash_image_url(recipe['recipe_title'])
+            image_url = fetch_recipe_image(recipe['recipe_title'])
             recipe['image_url'] = image_url
 
         return jsonify(trending_recipes), 200
@@ -393,4 +545,5 @@ def test():
     return jsonify({"message": "Test route is working!"}), 200
 
 if __name__ == '__main__':
+    sampling_mode = "Beam Search"  # or "Top-k Sampling"
     app.run(debug=True)
