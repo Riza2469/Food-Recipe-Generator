@@ -1,4 +1,3 @@
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 from urllib.parse import quote_plus
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -12,7 +11,6 @@ from bson import json_util
 from flask import Response
 import json
 import requests
-from itertools import permutations
 import requests
 from bs4 import BeautifulSoup
 
