@@ -31,36 +31,6 @@ recipes_collection = mongo_db['recipes']
 user_recipes_collection = mongo_db['user_recipes']
 user_favorites_collection = mongo_db['user_favorites']
 
-
-def load_model():
-    tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-recipe-generation")
-    model = AutoModelForSeq2SeqLM.from_pretrained("flax-community/t5-recipe-generation")
-    generator = pipeline("text2text-generation", model=model, tokenizer=tokenizer)
-    return generator, tokenizer
-
-
-def generate_recipe(ingredients):
-    # Load the model globally for efficiency (consider caching for larger models)
-    generator, tokenizer = load_model()
-    all_ingredients = ", ".join(ingredients)
-    
-    # Generate recipe using chosen logic
-    if sampling_mode == "Beam Search":
-        generated = generator(all_ingredients, return_tensors=True, return_text=False, **beam_search.generate_kwargs)
-        outputs = beam_search.post_generator(generated, tokenizer)
-    elif sampling_mode == "Top-k Sampling":
-        generated = generator(all_ingredients, return_tensors=True, return_text=False, **top_sampling.generate_kwargs)
-        outputs = top_sampling.post_generator(generated, tokenizer)
-    output = outputs[0]
-    return output
-
-@app.route('/generate_recipe', methods=['POST'])
-def generate_recipe_api():
-    data = request.get_json()
-    ingredients = data["ingredients"]
-    recipe = generate_recipe(ingredients)
-    return jsonify(recipe)
-
 # def fetch_unsplash_image_url(query, fallback_queries=None):
 #     access_key = os.getenv('UNSPLASH_ACCESS_KEY')
 #     if not access_key:
@@ -249,6 +219,28 @@ def get_recipes_by_name():
         return jsonify({'recipes': recipes_list}), 200
     except Exception as e:
         return jsonify({'error': f'Failed to fetch recipes: {str(e)}'}), 500
+
+
+# def fetch_image_url(recipe_title):
+#     try:
+#         # Prepare the search query
+#         search_query = recipe_title.replace(' ', '+')
+#         url = f"https://www.google.com/search?q={search_query}&tbm=isch"
+
+#         # Send a GET request to Google Images
+#         response = requests.get(url)
+#         response.raise_for_status()
+
+#         # Parse the response content with BeautifulSoup
+#         soup = BeautifulSoup(response.content, 'html.parser')
+
+#         # Extract the image URL from the first image result
+#         image_url = soup.find('img')['src']
+
+#         return image_url
+#     except Exception as e:
+#         print(f"Error fetching image URL: {e}")
+#         return None
 
 
 def load_data_from_mongodb():
@@ -545,5 +537,4 @@ def test():
     return jsonify({"message": "Test route is working!"}), 200
 
 if __name__ == '__main__':
-    sampling_mode = "Beam Search"  # or "Top-k Sampling"
     app.run(debug=True)
