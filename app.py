@@ -13,6 +13,9 @@ import json
 import requests
 import requests
 from bs4 import BeautifulSoup
+import cv2
+import numpy as np
+import base64
 
 
 app = Flask(__name__)
@@ -89,14 +92,14 @@ user_favorites_collection = mongo_db['user_favorites']
 
 #     return image_urls
 
-# def fetch_recipe_image(recipe_title, num_images=5):
-#     # Add "recipe" keyword to the query to improve relevance
-#     query = f"{recipe_title} recipe"
+def fetch_recipe_image(recipe_title, num_images=5):
+    # Add "recipe" keyword to the query to improve relevance
+    query = f"{recipe_title} recipe"
 
-#     # Fetch image URLs from Google
-#     image_urls = fetch_google_image_urls(query, num_images=num_images)
+    # Fetch image URLs from Google
+    image_urls = fetch_google_image_urls(query, num_images=num_images)
 
-#     return image_urls
+    return image_urls
 
 def fetch_google_image_urls(query, num_images=5):
     # Construct the Google search URL for images
@@ -129,14 +132,127 @@ def fetch_google_image_urls(query, num_images=5):
     else:
         return None
 
-def fetch_recipe_image(recipe_title, num_images=5):
-    # Add "recipe" keyword to the query to improve relevance
-    query = f"{recipe_title} recipe"
+# def fetch_recipe_image(recipe_title, num_images=5):
+#     # Add "recipe" keyword to the query to improve relevance
+#     query = f"{recipe_title} recipe"
 
-    # Fetch image URL from Google
-    image_url = fetch_google_image_urls(query, num_images=num_images)
+#     # Fetch image URL from Google
+#     image_url = fetch_google_image_urls(query, num_images=num_images)
 
-    return image_url
+#     return image_url
+
+
+# def fetch_google_image_urls(query, num_images=5):
+#     # Construct the Google search URL for images
+#     google_url = f"https://www.google.com/search?tbm=isch&q={quote_plus(query)}"
+
+#     # Set headers to mimic a real browser request
+#     headers = {
+#         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+#     }
+
+#     # Send a GET request to Google
+#     response = requests.get(google_url, headers=headers)
+
+#     # Parse the HTML content of the response
+#     soup = BeautifulSoup(response.text, "html.parser")
+
+#     # Find all image elements in the parsed HTML
+#     image_elements = soup.find_all("img")
+
+#     # Extract the source URLs of the images
+#     image_urls = []
+#     for img in image_elements[:num_images]:
+#         src = img.get("src")
+#         if src:
+#             # Check if the URL is a relative URL
+#             if src.startswith('/'):
+#                 # Prepend the base URL of Google Images
+#                 src = f"https://www.google.com{src}"
+#             # Download the image data
+#             image_data = download_image(src)
+#             if image_data is not None:
+#                 # Enhance image contrast
+#                 enhanced_image_data = enhance_image_contrast(image_data)
+#                 # Encode the image data to base64
+#                 encoded_image = encode_image(enhanced_image_data)
+#                 if encoded_image is not None:
+#                     image_urls.append(encoded_image)
+
+#     # Return the last URL in the list
+#     if image_urls:
+#         return image_urls[-1]
+#     else:
+#         return None
+
+def download_image(url):
+    # Send a GET request to download the image data
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.content
+    else:
+        return None
+
+# def enhance_image_contrast(image_data):
+#     # Decode the image data using OpenCV
+#     image_array = np.frombuffer(image_data, np.uint8)
+#     image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+#     if image is not None:
+#         # Apply image enhancement algorithms (e.g., contrast enhancement)
+#         # Here, we are simply returning the original image data for demonstration
+#         return image_data
+#     else:
+#         return None
+
+def enhance_image_contrast(image_data):
+    # Decode the image data using OpenCV
+    image_array = np.frombuffer(image_data, np.uint8)
+    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+    if image is not None:
+        # Convert the image to grayscale
+        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Apply contrast limited adaptive histogram equalization (CLAHE)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced_image = clahe.apply(gray_image)
+        # Convert the enhanced image back to BGR format
+        enhanced_image_bgr = cv2.cvtColor(enhanced_image, cv2.COLOR_GRAY2BGR)
+        # Encode the enhanced image data to JPEG format
+        _, encoded_image = cv2.imencode('.jpg', enhanced_image_bgr)
+        if encoded_image is not None:
+            return encoded_image.tostring()
+    
+    return None
+
+
+def encode_image(image_data):
+    # Encode the image data to base64
+    _, encoded_image = cv2.imencode('.jpg', image_data)
+    if encoded_image is not None:
+        return encoded_image.tostring()
+    else:
+        return None
+
+# def fetch_recipe_image(recipe_title, num_images=5):
+#     # Add "recipe" keyword to the query to improve relevance
+#     query = f"{recipe_title} recipe"
+
+#     # Fetch image URL from Google
+#     image_url = fetch_google_image_urls(query, num_images=num_images)
+
+#     return image_url
+# def fetch_recipe_image(recipe_title, num_images=5):
+#     try:
+#         # Add "recipe" keyword to the query to improve relevance
+#         query = f"{recipe_title} recipe"
+
+#         # Fetch image URL from Google
+#         image_url = fetch_google_image_urls(query, num_images=num_images)
+
+#         return image_url
+#     except Exception as e:
+#         print(f"Error fetching image for recipe '{recipe_title}': {e}")
+#         return None
+
 
 @app.route('/get_recipe_id', methods=['GET'])
 def get_recipe_id_by_name():
@@ -219,26 +335,26 @@ def get_recipes_by_name():
         return jsonify({'error': f'Failed to fetch recipes: {str(e)}'}), 500
 
 
-# def fetch_image_url(recipe_title):
-#     try:
-#         # Prepare the search query
-#         search_query = recipe_title.replace(' ', '+')
-#         url = f"https://www.google.com/search?q={search_query}&tbm=isch"
+def fetch_image_url(recipe_title):
+    try:
+        # Prepare the search query
+        search_query = recipe_title.replace(' ', '+')
+        url = f"https://www.google.com/search?q={search_query}&tbm=isch"
 
-#         # Send a GET request to Google Images
-#         response = requests.get(url)
-#         response.raise_for_status()
+        # Send a GET request to Google Images
+        response = requests.get(url)
+        response.raise_for_status()
 
-#         # Parse the response content with BeautifulSoup
-#         soup = BeautifulSoup(response.content, 'html.parser')
+        # Parse the response content with BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
 
-#         # Extract the image URL from the first image result
-#         image_url = soup.find('img')['src']
+        # Extract the image URL from the first image result
+        image_url = soup.find('img')['src']
 
-#         return image_url
-#     except Exception as e:
-#         print(f"Error fetching image URL: {e}")
-#         return None
+        return image_url
+    except Exception as e:
+        print(f"Error fetching image URL: {e}")
+        return None
 
 
 def load_data_from_mongodb():
@@ -293,7 +409,7 @@ def recommend_recipes():
         cosine_similarities = linear_kernel(input_vec, tfidf_matrix).flatten()
         filtered_recipes['similarity_score'] = cosine_similarities
         filtered_recipes['rating'] = filtered_recipes.get('rating', 0).astype(float)
-        filtered_recipes['combined_score'] = filtered_recipes['matching_ingredients'] * 0.5 + filtered_recipes['similarity_score'] * 0.25 + filtered_recipes['rating'] * 0.25
+        filtered_recipes['combined_score'] = filtered_recipes['matching_ingredients'] * 0.5 + filtered_recipes['similarity_score'] * 0.25+ filtered_recipes['rating'] * 0.25
         recommendations = filtered_recipes.sort_values(by=['combined_score', 'matching_ingredients'], ascending=False).head(10)
     except Exception as e:
         return jsonify({'error': f'Failed to generate recommendations: {str(e)}'}), 500
